@@ -1,0 +1,72 @@
+name: Convert XLSX to CSV
+
+on:
+  push:
+    paths:
+      - '**.xlsx'
+  workflow_dispatch:
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          
+      - name: Install dependencies
+        run: |
+          pip install openpyxl pandas
+          
+      - name: Convert XLSX to CSV
+        run: |
+          python - <<EOF
+          import os
+          import pandas as pd
+          from pathlib import Path
+          
+          # Find all XLSX files
+          xlsx_files = list(Path('.').rglob('*.xlsx'))
+          
+          for xlsx_file in xlsx_files:
+              # Skip files in .git directory
+              if '.git' in str(xlsx_file):
+                  continue
+                  
+              print(f"Converting {xlsx_file}")
+              
+              # Read XLSX file
+              xls = pd.ExcelFile(xlsx_file)
+              
+              # Convert each sheet
+              for sheet_name in xls.sheet_names:
+                  df = pd.read_excel(xlsx_file, sheet_name=sheet_name)
+                  
+                  # Create CSV filename
+                  if len(xls.sheet_names) > 1:
+                      csv_file = xlsx_file.with_suffix(f'.{sheet_name}.csv')
+                  else:
+                      csv_file = xlsx_file.with_suffix('.csv')
+                  
+                  # Save as CSV
+                  df.to_csv(csv_file, index=False)
+                  print(f"Created {csv_file}")
+          EOF
+          
+      - name: Commit CSV files
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add *.csv
+          git diff --quiet && git diff --staged --quiet || git commit -m "Convert XLSX to CSV"
+          
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
